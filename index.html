@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Random Joke Generator</title>
+  <style>
+    body { font-family: system-ui, -apple-system, "Segoe UI", Roboto, Arial; display:flex; align-items:center; justify-content:center; min-height:100vh; margin:0; background:#f7f7fb; }
+    .card { background:white; padding:24px; border-radius:12px; box-shadow:0 6px 18px rgba(20,20,40,0.08); width:min(720px,92vw); max-width:720px; }
+    h1 { margin:0 0 8px 0; font-size:20px; }
+    .joke { margin:20px 0; font-size:18px; line-height:1.4; color:#111; min-height:56px; }
+    .meta { font-size:13px; color:#666; margin-bottom:8px; }
+    .controls { display:flex; gap:8px; flex-wrap:wrap; }
+    button { padding:10px 14px; border-radius:8px; border:0; background:#0070f3; color:white; cursor:pointer; font-weight:600; }
+    button.secondary { background:#e6eefc; color:#0b57c9; }
+    button:disabled { opacity:.6; cursor:default; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>Random Joke Generator</h1>
+    <div class="meta">Source: <span id="source">JokeAPI</span></div>
+    <div id="joke" class="joke">Click "Get joke" to fetch a new joke.</div>
+    <div class="controls">
+      <button id="getJoke">Get joke</button>
+      <button id="getDadJoke" class="secondary">Get dad joke (icanhazdadjoke via proxy)</button>
+      <button id="copyBtn" class="secondary">Copy</button>
+      <button id="tweetBtn" class="secondary">Tweet</button>
+    </div>
+    <div style="margin-top:12px; font-size:12px; color:#666;">
+      Tip: JokeAPI can return single-line or two-part jokes. The dad-joke endpoint requires Accept header and is fetched via proxy to avoid CORS.
+    </div>
+  </div>
+
+  <script>
+    const jokeEl = document.getElementById('joke');
+    const sourceEl = document.getElementById('source');
+    const getJokeBtn = document.getElementById('getJoke');
+    const getDadJokeBtn = document.getElementById('getDadJoke');
+    const copyBtn = document.getElementById('copyBtn');
+    const tweetBtn = document.getElementById('tweetBtn');
+
+    function setLoading(isLoading) {
+      getJokeBtn.disabled = isLoading;
+      getDadJokeBtn.disabled = isLoading;
+      getJokeBtn.textContent = isLoading ? 'Loading…' : 'Get joke';
+    }
+
+    async function fetchJokeAPI() {
+      setLoading(true);
+      sourceEl.textContent = 'JokeAPI';
+      try {
+        // blacklist common offensive categories and allow any type (single/twopart)
+        const res = await fetch('https://v2.jokeapi.dev/joke/Any?blacklistFlags=nsfw,religious,political,racist,sexist,explicit');
+        if (!res.ok) throw new Error('Network response was not ok');
+        const data = await res.json();
+        let text;
+        if (data.type === 'single') {
+          text = data.joke;
+        } else {
+          // twopart
+          text = data.setup + '\n\n' + data.delivery;
+        }
+        jokeEl.textContent = text;
+      } catch (err) {
+        jokeEl.textContent = 'Error fetching joke: ' + err.message;
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    async function fetchDadJokeProxy() {
+      setLoading(true);
+      sourceEl.textContent = 'icanhazdadjoke (proxy)';
+      try {
+        // This expects an optional local server proxy at /api/dadjoke (see server.js)
+        // If you don't run the proxy, this request will fail due to CORS.
+        const res = await fetch('/api/dadjoke'); 
+        if (!res.ok) throw new Error('Network response was not ok');
+        const data = await res.json();
+        jokeEl.textContent = data.joke || JSON.stringify(data);
+      } catch (err) {
+        jokeEl.textContent = 'Error fetching dad joke (proxy required): ' + err.message;
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    getJokeBtn.addEventListener('click', fetchJokeAPI);
+    getDadJokeBtn.addEventListener('click', fetchDadJokeProxy);
+
+    copyBtn.addEventListener('click', async () => {
+      const text = jokeEl.textContent;
+      if (!text) return;
+      try {
+        await navigator.clipboard.writeText(text);
+        copyBtn.textContent = 'Copied!';
+        setTimeout(() => (copyBtn.textContent = 'Copy'), 1200);
+      } catch {
+        alert('Copy failed — select and copy manually.');
+      }
+    });
+
+    tweetBtn.addEventListener('click', () => {
+      const max = 280;
+      const text = jokeEl.textContent || '';
+      const url = 'https://twitter.com/intent/tweet?text=' + encodeURIComponent(text.slice(0, max));
+      window.open(url, '_blank', 'noopener');
+    });
+
+    // Fetch a joke on load
+    fetchJokeAPI();
+  </script>
+</body>
+</html>
