@@ -1,0 +1,168 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String   @id @default(uuid())
+  username     String   @unique
+  email        String?  @unique
+  passwordHash String
+  role         Role     @default(WORKER)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  loans        Loan[]   @relation("LoanBorrower")
+  activityLogs ActivityLog[]
+}
+
+enum Role {
+  ADMIN
+  MANAGER
+  AGRONOMIST
+  ACCOUNTANT
+  WORKER
+  IT
+}
+
+model Farmer {
+  id         String   @id @default(uuid())
+  name       String
+  phone      String?
+  email      String?
+  documents  String?   // url or notes
+  fields     Field[]
+  createdAt  DateTime  @default(now())
+}
+
+model Field {
+  id          String   @id @default(uuid())
+  farmer      Farmer   @relation(fields: [farmerId], references: [id])
+  farmerId    String
+  name        String
+  geojson     Json?    // polygon coordinates as GeoJSON
+  areaHectare Float?   // computed value (convenience)
+  soilType    String?
+  createdAt   DateTime @default(now())
+  plantings   Planting[]
+}
+
+model Planting {
+  id           String   @id @default(uuid())
+  field        Field    @relation(fields: [fieldId], references: [id])
+  fieldId      String
+  date         DateTime
+  species      String
+  densityPerHa Int?
+  notes        String?
+  createdAt    DateTime @default(now())
+}
+
+model Lot {
+  id          String   @id @default(uuid())
+  lotCode     String   @unique
+  origin      String?  // ex: purchaseId, farm batch, supplier
+  createdAt   DateTime @default(now())
+  movements   Stock[]  // in/out movements
+  // relations with processes/exports via lotId field on those models
+}
+
+model Processing {
+  id          String   @id @default(uuid())
+  batchCode   String   @unique
+  lotId       String?  // optional link to Lot
+  lot         Lot?     @relation(fields: [lotId], references: [id])
+  date        DateTime
+  originFarm  Farmer?  @relation(fields: [farmerId], references: [id])
+  farmerId    String?
+  kilosIn     Float
+  kilosOut    Float
+  quality     String?
+  notes       String?
+  createdAt   DateTime @default(now())
+}
+
+model Purchase {
+  id         String   @id @default(uuid())
+  lotId      String?  // if purchase created a lot
+  lot        Lot?     @relation(fields: [lotId], references: [id])
+  supplier   String
+  date       DateTime
+  kilos      Float
+  pricePerKg Float
+  total      Float
+  createdAt  DateTime @default(now())
+}
+
+model Export {
+  id            String   @id @default(uuid())
+  lotId         String?  // which lot was exported
+  lot           Lot?     @relation(fields: [lotId], references: [id])
+  customerName  String
+  date          DateTime
+  kilosExported Float
+  value         Float
+  documentation String?  // URL to paperwork
+  createdAt     DateTime @default(now())
+}
+
+model Stock {
+  id         String   @id @default(uuid())
+  lotId      String?  // linked lot
+  lot        Lot?     @relation(fields: [lotId], references: [id])
+  kilos      Float
+  movement   MovementType
+  source     String?  // reference (purchaseId, processingId, exportId, manual)
+  createdAt  DateTime @default(now())
+}
+
+enum MovementType {
+  IN
+  OUT
+}
+
+model Loan {
+  id            String   @id @default(uuid())
+  type          LoanType
+  borrowerId    String?   // user
+  borrower      User?     @relation("LoanBorrower", fields: [borrowerId], references: [id])
+  amount        Float
+  item          String?   // for equipment loans
+  issuedDate    DateTime  @default(now())
+  dueDate       DateTime?
+  outstanding   Float
+  status        LoanStatus @default(ACTIVE)
+  repayments    Repayment[]
+}
+
+enum LoanType {
+  CASH
+  EQUIPMENT
+}
+
+model Repayment {
+  id        String   @id @default(uuid())
+  loan      Loan     @relation(fields: [loanId], references: [id])
+  loanId    String
+  date      DateTime @default(now())
+  amount    Float
+  notes     String?
+}
+
+enum LoanStatus {
+  ACTIVE
+  CLOSED
+  DEFAULTED
+}
+
+model ActivityLog {
+  id        String   @id @default(uuid())
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id])
+  action    String
+  details   String?
+  createdAt DateTime @default(now())
+}
